@@ -1,10 +1,12 @@
 # Trigger when commits are pushed to the master branch
 
+name: Bump version
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - release
-  workflow_dispatch:
 
 
 jobs:
@@ -13,13 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-    - name: Checkout Repository
-      uses: actions/checkout@master
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.sha }} # required for better experience using pre-releases
+        #fetch-depth: '0'
 
     - name: Checkout go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v4
       with:
-        go-version: '1.16' # The Go version to download (if necessary) and use.
+        go-version: '1.22' # The Go version to download (if necessary) and use.
 
     - name: Go version
       id: Version
@@ -28,40 +32,37 @@ jobs:
     - name: Go download
       run: go mod download
 
-    # - name: Go test
-    #   run: go test -v ./...
-    #   continue-on-error: true
+    - name: Go test
+      run: go test -v ./...
+      continue-on-error: false
 
     - name: Go build
       run: mkdir -p build && go build -v -o build/hubapp && build/hubapp --help
 
     - name: Bump version and push tag
-      uses: anothrNick/github-tag-action@1.26.0
-      id: vars
+      uses: anothrNick/github-tag-action@1.67.0
+      id: tagging #test4
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         WITH_V: false
-        INITIAL_VERSION: 0.4.0
+        INITIAL_VERSION: 1.0.0
         RELEASE_BRANCHES: release
         DEFAULT_BUMP: patch
+        PRERELEASE: false
+        DRY_RUN: false
+        VERBOSE: true
 
-    - name: Check output
-      env:
-        RELEASE_VERSION: ${{ steps.vars.outputs.tag }}
-      run: |
-        echo $RELEASE_VERSION
-        echo ${{ steps.vars.outputs.tag }}
-
-    - name: Install GoReleaser
-      uses: goreleaser/goreleaser-action@v2
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v5
       with:
         version: latest
-        args: release --rm-dist
+        args: release --clean
       env:
-        GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
-        RELEASE_VERSION: ${{ steps.vars.outputs.tag }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_VERSION: ${{ steps.tagging.outputs.tag }}
         CLIENT_ID: ${{ secrets.CLIENT_ID }}
         CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
     - name: Install Python
       uses: actions/setup-python@v2
